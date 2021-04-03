@@ -56,7 +56,7 @@ loss_fn = keras.losses.SparseCategoricalCrossentropy()
 N_iter = 5 # number of iterations used to solve convex subproblem
 epochs = 1
 
-damping_const = 800000 #80
+damping_const = 800 #800000 #80
 eps = 1
 k_max = 100
 for epoch in range(epochs):
@@ -73,10 +73,7 @@ for epoch in range(epochs):
         gradH = tape.gradient(H,dc_model.trainable_weights)
         
         H0 = H
-        gradH0x0 = 0
-        for idx in range(model_len):
-            gradH0x0 += tf.reduce_sum(gradH[idx]*dc_model.trainable_weights[idx])
-        
+        gradH0x0 = scalar_product(gradH,dc_model.trainable_weights)
         
         con_grad0 = [0*elem for elem in gradH]  #xem lai
         for i in range(N_iter):
@@ -128,19 +125,22 @@ for epoch in range(epochs):
                             if grad_elem is not None]
                     Hess_vec = out_tape.gradient(elemwise_products,dc_model.trainable_weights)
                     reg_Hess_vec = [Hess_vec[idx]+damping_const*p[idx] for idx in range(model_len)]
-                    rdotr = sum([tf.reduce_sum(r[idx]*r[idx]) for idx in range(model_len)])
-                    alpha = rdotr/sum([tf.reduce_sum(p[idx]*reg_Hess_vec[idx]) for idx in range(model_len)])
+                    rdotr = scalar_product(r,r)
+                    alpha = rdotr/scalar_product(p,reg_Hess_vec)
                     con_grad = [con_grad[idx]+alpha*p[idx] for idx in range(model_len)]
                     r_next = [r[idx]-alpha*reg_Hess_vec[idx] for idx in range(model_len)]
                     if norm_square(r_next) < eps or k>k_max:
                         break
-                    rnextdotrnext = sum([tf.reduce_sum(r_next[idx]*r_next[idx]) for idx in range(model_len)])
+                    rnextdotrnext = scalar_product(r_next,r_next)
                     beta = rnextdotrnext/rdotr
                     r = r_next
                     p = [r[idx]+beta*p[idx] for idx in range(model_len)]
                     k += 1
             
-            for pst in range(model_len):
+            gradH0x = scalar_product(gradH,dc_model.trainable_weights)
+            subloss = G-(H0+gradH0x-gradH0x0)
+            print("subloss",subloss.numpy())
+            for idx in range(model_len):
                 dc_model.trainable_weights[idx].assign_add(con_grad[idx])
         
         if step%1==0:
