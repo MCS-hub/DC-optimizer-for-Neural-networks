@@ -56,18 +56,18 @@ loss_fn = keras.losses.SparseCategoricalCrossentropy()
 N_iter = 5 # number of iterations used to solve convex subproblem
 epochs = 1
 
-learning_rate = 0.000000001
-damping_const = 80
+damping_const = 800000 #80
 eps = 1
 k_max = 100
 for epoch in range(epochs):
     for step, (x_batch,y_batch) in enumerate(train_dataset):
+        
+        current_batch_size = y_batch.shape[0]
+        y_one_hot = tf.one_hot(y_batch,depth=10,dtype=tf.float64)
         with tf.GradientTape() as tape:
             outputs = dc_model(x_batch)
             delta = outputs[:,:10]
             psi = outputs[:,10:]
-            current_batch_size = y_batch.shape[0]
-            y_one_hot = tf.one_hot(y_batch,depth=10,dtype=tf.float64)
             H = tf.reduce_sum(delta + psi,axis=1) + tf.reduce_sum(delta*y_one_hot,1)
             H = tf.reduce_sum(H)/current_batch_size
         gradH = tape.gradient(H,dc_model.trainable_weights)
@@ -77,7 +77,6 @@ for epoch in range(epochs):
         for idx in range(model_len):
             gradH0x0 += tf.reduce_sum(gradH[idx]*dc_model.trainable_weights[idx])
         
-        optimizer = keras.optimizers.Adagrad(learning_rate = learning_rate)
         
         con_grad0 = [0*elem for elem in gradH]  #xem lai
         for i in range(N_iter):
@@ -93,7 +92,7 @@ for epoch in range(epochs):
             gradG = tape.gradient(G, dc_model.trainable_weights)
             ngrad = [-gradG[idx]+gradH[idx] for idx in range(model_len)]
             
-            con_grad = con_grad0
+            con_grad = con_grad0   #can be improved?
             with tf.GradientTape() as out_tape:
                 with tf.GradientTape() as in_tape:
                     outputs = dc_model(x_batch)
@@ -140,8 +139,7 @@ for epoch in range(epochs):
                     r = r_next
                     p = [r[idx]+beta*p[idx] for idx in range(model_len)]
                     k += 1
-               
-                    
+            
             for pst in range(model_len):
                 dc_model.trainable_weights[idx].assign_add(con_grad[idx])
         
